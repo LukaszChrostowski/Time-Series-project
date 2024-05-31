@@ -36,7 +36,8 @@ log_returns <- tq_transmute(data_microsoft,
 
 par(mfrow = c(2, 1))
 ts.plot(log_returns) # if trend is visible (it is!), model should be like sarima + garch
-ts.plot(log_returns$daily.returns)
+ts.plot(log_returns$daily.returns, main = "Stock Daily Returns over Time",
+        ylab = "Daily Return")
 
 acf(log_returns)
 pacf(log_returns)
@@ -66,13 +67,15 @@ ggplot(log_returns, aes(x=Date, y=daily.returns)) +
        y="Daily Return") +
   theme_minimal()
 
-# histogram and density of Volume
+# histogram and density of Daily Stock Returns
 p2 <- ggplot(log_returns) 
 
 p2 + geom_histogram(aes(x=daily.returns, y=..density..), bins = 100, color="steelblue",
                     fill="grey", size=1) +
   stat_function(fun = dnorm, args = list(mean = mean(log_returns$daily.returns, na.rm = T),
-                                         sd = sd(log_returns$daily.returns, na.rm = T)), size=1)
+                                         sd = sd(log_returns$daily.returns, na.rm = T)), size=1) +
+  xlab("Daily Returns") +
+  ggtitle("Histogram and density of Daily Stock Returns")
 # looks like normal distribution
 
 
