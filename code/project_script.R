@@ -107,6 +107,16 @@ p2 + geom_histogram(aes(x=daily.returns, y=..density..), bins = 100, color="stee
 # Trend
 ts.plot(log_returns)
 model <- lm(data = log_returns, daily.returns ~ Date)
+
+# plot 
+ggplot(log_returns, aes(x = Date, y = daily.returns)) +
+  geom_line(color = "blue") +  # Plot the time series data
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  # Add the linear trend line
+  labs(title = "Trend Plot for Daily Returns",
+       x = "Date",
+       y = "Value") +
+  theme_minimal()
+
 # slowly increasing trend is visible but not significant from statistical point of view
 
 ###############################################
@@ -266,6 +276,8 @@ garch <- do_garch(garch.model = "sGARCH",
                   ar = 1, 
                   ma = 2)
 
+# shapiro.test(as.vector(garch$residuals))
+
 par(mfrow = c(1, 1))
 plot.ts(garch$residuals, main = "Residuals of GARCH model", ylab = "Residuals")
 plot.ts(garch$squared_residuals, main = "Squared Residuals of GARCH model", ylab = "Squared Residuals")
@@ -282,4 +294,81 @@ pacf(garch$squared_residuals, main = "PACF of Squared Standardized Residuals")
 par(mfrow = c(1, 1))
 
 ########## FORECASTING #################################
+# Train-test split (80-20)
+set.seed(123)
+n <- length(log_returns$daily.returns)
+train_size <- floor(0.8 * n)
+train_data <- log_returns$daily.returns[1:train_size]
+test_data <- log_returns$daily.returns[(train_size + 1):n]
+test_dates <- log_returns$Date[(train_size + 1):n]
 
+# Fit GARCH model on training data
+spec <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+                   mean.model = list(armaOrder = c(1, 2)),
+                   distribution.model = "norm")
+fit <- ugarchfit(spec, train_data, solver = "hybrid")
+
+# Forecast based on test data
+forecast_horizon <- length(test_data)
+garch_forecast <- ugarchforecast(fit, n.ahead = forecast_horizon)
+
+# Extract forecasted values and confidence intervals
+forecasted_values <- fitted(garch_forecast)
+forecasted_sigma <- sigma(garch_forecast)
+forecasted_upper <- forecasted_values + 1.96 * forecasted_sigma
+forecasted_lower <- forecasted_values - 1.96 * forecasted_sigma
+
+# Create data frame for plotting
+forecast_df <- data.frame(Date = test_dates, 
+                          Forecasted_Returns = forecasted_values, 
+                          Upper_CI = forecasted_upper, 
+                          Lower_CI = forecasted_lower)
+colnames(forecast_df) <- c("Date", "Forecasted_Returns", "Upper_CI", "Lower_CI")
+
+# Plot forecasted returns with confidence intervals
+ggplot() +
+  geom_line(data = log_returns, aes(x = Date, y = daily.returns), color = "blue") +
+  geom_line(data = forecast_df, aes(x = Date, y = Forecasted_Returns), color = "red") +
+  geom_ribbon(data = forecast_df, aes(x = Date, ymin = Lower_CI, ymax = Upper_CI), alpha = 0.2, fill = "red") +
+  labs(title = "GARCH Model Forecast with Confidence Intervals",
+       x = "Date",
+       y = "Daily Returns") +
+  theme_minimal()
+
+# Initialize variables
+test_start <- train_size + 1
+rolling_forecast_sigma <- numeric(length(test_data))  # Adjust size according to rolling window
+
+# Rolling forecast on test data
+for (i in test_start:n) {
+  train_data <- log_returns$daily.returns[1:i]
+  
+  # Fit the GARCH model
+  spec <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+                     mean.model = list(armaOrder = c(1, 2)),
+                     distribution.model = "norm")
+  
+  fit <- ugarchfit(spec, train_data, solver = "hybrid")
+  
+  # Forecast one step ahead
+  forecast <- ugarchforecast(fit, n.ahead = 1)
+  
+  # Store the forecasted sigma
+  rolling_forecast_sigma[i - test_start + 1] <- sigma(forecast)
+}
+
+# Create data frame for plotting
+rolling_forecast_dates <- log_returns$Date[test_start:n]
+rolling_forecast_df <- data.frame(Date = rolling_forecast_dates, Predicted_Volatility = rolling_forecast_sigma)
+
+# Extract actual values for comparison
+actual_volatility <- log_returns$daily.returns[test_start:n]
+
+# Plot predicted volatility with actual values
+ggplot() +
+  geom_line(data = rolling_forecast_df, aes(x = Date, y = Predicted_Volatility), color = "red") +
+  geom_line(aes(x = rolling_forecast_dates, y = actual_volatility), color = "blue") +
+  labs(title = "One-Step Ahead Rolling Forecast of Volatility with Actual Values",
+       x = "Date",
+       y = "Volatility") +
+  theme_minimal()
