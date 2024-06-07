@@ -99,7 +99,7 @@ p2 + geom_histogram(aes(x=daily.returns, y=..density..), bins = 100, color="stee
 
 
 ########### STATIONARITY ##########
-
+# TODO
 # stationarity - series
 # adf.test(log_returns$daily.returns)
 # kpss.test(log_returns$daily.returns, null = c("Level", "Trend"), lshort = TRUE)
@@ -116,7 +116,6 @@ ggplot(log_returns, aes(x = Date, y = daily.returns)) +
        x = "Date",
        y = "Value") +
   theme_minimal()
-
 # slowly increasing trend is visible but not significant from statistical point of view
 
 ###############################################
@@ -135,17 +134,16 @@ p3 +
        x="Day",
        y="Volatility")
 
-############# ARIMA #################
-
-# Since we know that we have (?) trend in data - we have to remove it using autoarima
-arima_fit <- auto.arima(log_returns$daily.returns)
-# ARIMA(2,0,1) with non-zero mean 
-residuals_arima <- residuals(arima_fit)
-
-
 ############# GARCH #################
 # function to fit the model
-do_garch <- function(garch.model, garch.r, garch.s, data, dist.model, ar = 0, ma = 0) {
+do_garch <- function(garch.model,
+                     garch.r, # parameter for GARCH model
+                     garch.s, # parameter for GARCH model
+                     data,
+                     dist.model,
+                     ar = 0, # parameter for AR part
+                     ma = 0) # parameter for MA part
+  {
   # Specify the GARCH model - here we use a basic GARCH(1,1) model
   garch_spec <- ugarchspec(variance.model=list(model=garch.model,
                                                garchOrder=c(garch.r, garch.s)),
@@ -167,35 +165,6 @@ do_garch <- function(garch.model, garch.r, garch.s, data, dist.model, ar = 0, ma
        residuals = residuals,
        squared_residuals = squared_residuals)
 }
-############# Assuming TREND in DATA -> basing on residuals from ARIMA #################
-# (1, 1)
-garch <- do_garch(garch.model = "sGARCH",
-                  garch.r = 1,
-                  garch.s = 1,
-                  data = residuals_arima,
-                  dist.model = "norm")
-print(garch$fit)
-
-# Conclusion from fit
-# 1 No serial correlation between garch residuals
-# Akaike       -5.5615
-# Bayes        -5.5474
-
-par(mfrow = c(1, 1))
-plot.ts(garch$residuals, main = "Residuals of GARCH model", ylab = "Residuals")
-plot.ts(garch$squared_residuals, main = "Squared Residuals of GARCH model", ylab = "Squared Residuals")
-
-# ACF analysis for residuals
-# This will allow you to check the adequacy of the GARCH(1,1) model by examining whether the residuals
-# and their squared values exhibit any significant autocorrelation. If the ACF and PACF plots show no
-# significant autocorrelation, and have a N(0,1) white noise behaviour, the model is considered a good fit for the data.
-par(mfrow = c(2, 2))
-acf(garch$residuals, main = "ACF of Standardized Residuals")
-pacf(garch$residuals, main = "PACF of Standardized Residuals")
-acf(garch$squared_residuals, main = "ACF of Squared Standardized Residuals")
-pacf(garch$squared_residuals, main = "PACF of Squared Residuals")
-par(mfrow = c(1, 1))
-
 
 ############# Assuming NO TREND in DATA #################
 
@@ -294,6 +263,8 @@ pacf(garch$squared_residuals, main = "PACF of Squared Standardized Residuals")
 par(mfrow = c(1, 1))
 
 ########## FORECASTING #################################
+# Since we found the most suitable model for our time series.
+# now we can spllit data and do forecast to evaluate our model on test data
 # Train-test split (80-20)
 set.seed(123)
 n <- length(log_returns$daily.returns)
@@ -311,6 +282,9 @@ fit <- ugarchfit(spec, train_data, solver = "hybrid")
 # Forecast based on test data
 forecast_horizon <- length(test_data)
 garch_forecast <- ugarchforecast(fit, n.ahead = forecast_horizon)
+
+
+# FORECAST OF DAILY RETURNS ###################
 
 # Extract forecasted values and confidence intervals
 forecasted_values <- fitted(garch_forecast)
@@ -334,6 +308,8 @@ ggplot() +
        x = "Date",
        y = "Daily Returns") +
   theme_minimal()
+
+# FORECAST OF VOLATILITY (VARIABILITY) ######################
 
 # Initialize variables
 test_start <- train_size + 1
