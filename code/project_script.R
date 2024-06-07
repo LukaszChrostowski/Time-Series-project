@@ -87,7 +87,7 @@ ggplot(log_returns, aes(x=Date, y=daily.returns)) +
   theme_minimal()
 
 # histogram and density of Daily Stock Returns
-p2 <- ggplot(log_returns) 
+p2 <- ggplot(log_returns)
 
 p2 + geom_histogram(aes(x=daily.returns, y=..density..), bins = 100, color="steelblue",
                     fill="grey", size=1) +
@@ -99,16 +99,21 @@ p2 + geom_histogram(aes(x=daily.returns, y=..density..), bins = 100, color="stee
 
 
 ########### STATIONARITY ##########
-# TODO
-# stationarity - series
-# adf.test(log_returns$daily.returns)
-# kpss.test(log_returns$daily.returns, null = c("Level", "Trend"), lshort = TRUE)
+# stationarity - original time series
+adf.test(data_microsoft$Close)
+kpss.test(data_microsoft$Close, null = c("Level", "Trend"), lshort = TRUE)
+# stationarity - log returns
+adf.test(log_returns$daily.returns)
+kpss.test(log_returns$daily.returns, null = c("Level", "Trend"), lshort = TRUE)
+# stationarity - squared_log_returns
+adf.test(squared_log_returns)
+kpss.test(squared_log_returns, null = c("Level", "Trend"), lshort = TRUE)
 
 # Trend
 ts.plot(log_returns)
 model <- lm(data = log_returns, daily.returns ~ Date)
 
-# plot 
+# plot
 ggplot(log_returns, aes(x = Date, y = daily.returns)) +
   geom_line(color = "blue") +  # Plot the time series data
   geom_smooth(method = "lm", color = "red", se = FALSE) +  # Add the linear trend line
@@ -128,7 +133,7 @@ rolling_vol <- rollapply(log_returns$daily.returns, width = 30,
 vol <- data.frame(index(rolling_vol), rolling_vol)
 colnames(vol) <- c("date", "volatility")
 p3 <- ggplot(vol, aes(x=date, y=volatility))
-p3 + 
+p3 +
   geom_line( color="steelblue") +
   labs(title="Daily return volatility over Time",
        x="Day",
@@ -150,16 +155,16 @@ do_garch <- function(garch.model,
                            mean.model=list(armaOrder=c(ar, ma)),
                            distribution.model = dist.model)
   # just for now - probably needed to find more efficient one
-  
+
   # Fit the GARCH model to the differenced volume series
   # garch_fit <- ugarchfit(spec = garch_spec, data = log_returns$daily.returns)
   garch_fit <- ugarchfit(spec = garch_spec,
                          data = data)
-  
+
   ############## RESIDUAL ANALYSIS #################
   residuals <- residuals(garch_fit, standardize = TRUE)
   squared_residuals <- residuals^2
-  
+
   list(garch_spec = garch_spec,
        fit = garch_fit,
        residuals = residuals,
@@ -190,27 +195,27 @@ results <- data.frame(garch.r = integer(),
 for (i in 1:nrow(garch_orders)) {
   garch.r <- garch_orders$garch.r[i]
   garch.s <- garch_orders$garch.s[i]
-  
+
   for (j in 1:nrow(arma_orders)) {
     ar <- arma_orders$ar[j]
     ma <- arma_orders$ma[j]
-    
+
     # Fit the GARCH model with ARMA orders
     try({
-      model <- do_garch(garch.model = "sGARCH", 
-                        garch.r = garch.r, 
-                        garch.s = garch.s, 
-                        data = log_returns$daily.returns, 
-                        dist.model = "norm", 
-                        ar = ar, 
+      model <- do_garch(garch.model = "sGARCH",
+                        garch.r = garch.r,
+                        garch.s = garch.s,
+                        data = log_returns$daily.returns,
+                        dist.model = "norm",
+                        ar = ar,
                         ma = ma)
-      
+
       # Extract the AIC and BIC
       aic <- infocriteria(model$fit)[1]
       bic <- infocriteria(model$fit)[2]
       shib <- infocriteria(model$fit)[3]
       han <- infocriteria(model$fit)[4]
-      
+
       # Store the results
       results <- rbind(results, data.frame(garch.r = garch.r, garch.s = garch.s,
                                            ar = ar, ma = ma,
@@ -236,13 +241,13 @@ print(best_shib_model)
 print("Best ARMA model by HAN:")
 print(best_han_model)
 
-########## FINAL MODEL 
-garch <- do_garch(garch.model = "sGARCH", 
-                  garch.r = 1, 
-                  garch.s = 1, 
-                  data = log_returns$daily.returns, 
-                  dist.model = "norm", 
-                  ar = 1, 
+########## FINAL MODEL
+garch <- do_garch(garch.model = "sGARCH",
+                  garch.r = 1,
+                  garch.s = 1,
+                  data = log_returns$daily.returns,
+                  dist.model = "norm",
+                  ar = 1,
                   ma = 2)
 
 # shapiro.test(as.vector(garch$residuals))
@@ -293,9 +298,9 @@ forecasted_upper <- forecasted_values + 1.96 * forecasted_sigma
 forecasted_lower <- forecasted_values - 1.96 * forecasted_sigma
 
 # Create data frame for plotting
-forecast_df <- data.frame(Date = test_dates, 
-                          Forecasted_Returns = forecasted_values, 
-                          Upper_CI = forecasted_upper, 
+forecast_df <- data.frame(Date = test_dates,
+                          Forecasted_Returns = forecasted_values,
+                          Upper_CI = forecasted_upper,
                           Lower_CI = forecasted_lower)
 colnames(forecast_df) <- c("Date", "Forecasted_Returns", "Upper_CI", "Lower_CI")
 
@@ -318,17 +323,17 @@ rolling_forecast_sigma <- numeric(length(test_data))  # Adjust size according to
 # Rolling forecast on test data
 for (i in test_start:n) {
   train_data <- log_returns$daily.returns[1:i]
-  
+
   # Fit the GARCH model
   spec <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
                      mean.model = list(armaOrder = c(1, 2)),
                      distribution.model = "norm")
-  
+
   fit <- ugarchfit(spec, train_data, solver = "hybrid")
-  
+
   # Forecast one step ahead
   forecast <- ugarchforecast(fit, n.ahead = 1)
-  
+
   # Store the forecasted sigma
   rolling_forecast_sigma[i - test_start + 1] <- sigma(forecast)
 }
